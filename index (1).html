@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candy Multiplication</title>
+<style>
+body{font-family:Arial,sans-serif;background:#fff7ee;text-align:center;margin:0;padding:25px;color:#3d2645}
+.card{max-width:520px;margin:auto;background:white;padding:25px;border-radius:24px;box-shadow:0 6px 0 #f0dcc7}
+h1{color:#ff6b9d}.tables{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:20px 0}
+button{border:0;border-radius:14px;padding:14px;font-size:20px;font-weight:bold;cursor:pointer}
+.table{background:#eee}.table.active{background:#ff6b9d;color:white}
+.start{background:#ff6b9d;color:white;margin:15px;padding:15px 35px}
+.choice{background:#fff;border:2px solid #eee;width:45%;margin:6px}
+.choice:hover{background:#ffe3ec}
+#timer{font-size:28px;color:#8b5fbf;font-weight:bold;margin:15px}
+#question{font-size:38px;font-weight:bold}
+#feedback{font-size:20px;font-weight:bold;min-height:30px}
+#game{display:none}
+#results{display:none}
+.candies{font-size:25px;line-height:1.5;max-width:350px;margin:auto}
+</style>
+</head>
+<body>
+<div class="card">
+<div id="home">
+<h1>🍬 Candy Multiplication</h1>
+<p>Pick your times tables!</p>
+<div class="tables" id="tables"></div>
+<button class="start" onclick="startGame()">Start Playing ▶</button>
+</div>
+
+<div id="game">
+<div>Question <span id="number">1</span>/10</div>
+<div id="timer">⏱️ 10</div>
+<div id="score">⭐ 0</div>
+<div id="streak">🔥 0 streak</div>
+<div id="question"></div>
+<div id="candies" class="candies"></div>
+<div id="feedback"></div>
+<div id="choices"></div>
+</div>
+
+<div id="results">
+<h1>🎉 Round Complete!</h1>
+<h2 id="finalScore"></h2>
+<p id="finalStreak"></p>
+<button class="start" onclick="startGame()">Play Again</button>
+<button onclick="goHome()">Tables</button>
+</div>
+</div>
+
+<script>
+let selectedTables=[2,3,4,5];
+let questions=[],index=0,score=0,streak=0,bestStreak=0,time=10,timer=null;
+const AudioContext=window.AudioContext||window.webkitAudioContext;
+let audioCtx;
+
+function sound(type){
+  try{
+    audioCtx=audioCtx||new AudioContext();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    let freq=type==="correct"?700:type==="wrong"?180:type==="timeout"?120:type==="tick"?500:900;
+    o.frequency.value=freq;o.type=type==="wrong"?"sawtooth":"sine";
+    g.gain.setValueAtTime(.001,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.12,audioCtx.currentTime+.01);
+    g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+(type==="correct"?0.25:0.12));
+    o.start();o.stop(audioCtx.currentTime+.3);
+  }catch(e){}
+}
+
+function setupTables(){
+  const box=document.getElementById("tables");
+  for(let i=1;i<=12;i++){
+    const b=document.createElement("button");b.className="table "+(selectedTables.includes(i)?"active":"");
+    b.textContent=i;b.onclick=()=>{selectedTables=selectedTables.includes(i)?selectedTables.filter(x=>x!==i):[...selectedTables,i].sort((a,b)=>a-b);b.classList.toggle("active")};box.appendChild(b);
+  }
+}
+function makeQuestion(){
+  const a=selectedTables[Math.floor(Math.random()*selectedTables.length)];
+  const b=Math.floor(Math.random()*10)+1;
+  return {a,b,answer:a*b};
+}
+function startGame(){
+  if(!selectedTables.length) selectedTables=[2,3,4,5];
+  questions=Array.from({length:10},makeQuestion);index=0;score=0;streak=0;bestStreak=0;
+  document.getElementById("home").style.display="none";
+  document.getElementById("results").style.display="none";
+  document.getElementById("game").style.display="block";
+  loadQuestion();
+}
+function loadQuestion(){
+  clearInterval(timer);time=10;
+  const q=questions[index];
+  document.getElementById("number").textContent=index+1;
+  document.getElementById("timer").textContent="⏱️ "+time;
+  document.getElementById("score").textContent="⭐ "+score;
+  document.getElementById("streak").textContent="🔥 "+streak+" streak";
+  document.getElementById("question").textContent=q.a+" × "+q.b+" = ?";
+  document.getElementById("candies").textContent="🍬 ".repeat(Math.min(q.a*q.b,50));
+  document.getElementById("feedback").textContent="";
+  const nums=new Set([q.answer,q.answer+q.a,q.answer-q.a,q.answer+q.b]);
+  while(nums.size<4) nums.add(Math.max(1,q.answer+Math.floor(Math.random()*10)-5));
+  const box=document.getElementById("choices");box.innerHTML="";
+  [...nums].sort(()=>Math.random()-.5).forEach(n=>{
+    const b=document.createElement("button");b.className="choice";b.textContent=n;b.onclick=()=>answer(n);box.appendChild(b);
+  });
+  timer=setInterval(()=>{
+    time--;document.getElementById("timer").textContent="⏱️ "+time;
+    if(time<=3&&time>0)sound("tick");
+    if(time<=0){clearInterval(timer);sound("timeout");answer(null,true)}
+  },1000);
+}
+function answer(value,timeout=false){
+  if(!timer)return;clearInterval(timer);
+  const q=questions[index],buttons=document.querySelectorAll(".choice");
+  buttons.forEach(b=>b.disabled=true);
+  if(value===q.answer){
+    score++;streak++;bestStreak=Math.max(bestStreak,streak);sound("correct");
+    document.getElementById("feedback").textContent="🍭 Sweet! That's right!";
+  }else{
+    streak=0;sound(timeout?"timeout":"wrong");
+    document.getElementById("feedback").textContent=timeout?"⏰ Time's up! Answer: "+q.answer:"❌ Almost! Answer: "+q.answer;
+  }
+  setTimeout(()=>{
+    index++;
+    if(index<10)loadQuestion();else finish();
+  },value===q.answer?900:1300);
+}
+function finish(){
+  document.getElementById("game").style.display="none";
+  document.getElementById("results").style.display="block";
+  document.getElementById("finalScore").textContent="⭐ "+score+"/10 correct";
+  document.getElementById("finalStreak").textContent="🔥 Best streak: "+bestStreak;
+  sound("finish");
+}
+function goHome(){
+  clearInterval(timer);document.getElementById("results").style.display="none";document.getElementById("home").style.display="block";
+}
+setupTables();
+</script>
+</body>
+</html>
